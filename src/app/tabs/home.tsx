@@ -10,6 +10,8 @@ export default function App() {
         pauseDuration={1500}
         showCursor={true}
         cursorCharacter="_"
+        variableSpeed={false}
+        onSentenceComplete={() => {}} 
       />
     </div>
   );
