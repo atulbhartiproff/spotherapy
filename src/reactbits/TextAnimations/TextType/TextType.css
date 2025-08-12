@@ -1,10 +1,14 @@
 /*
-	Installed from https://reactbits.dev/default/
+    Installed from https://reactbits.dev/default/
 */
+
+@import url('https://fonts.googleapis.com/css2?family=Raleway:wght@400;700&display=swap');
 
 .text-type {
   display: inline-block;
   white-space: pre-wrap;
+  font-size: 2rem; 
+  font-family: 'Raleway', sans-serif; 
 }
 
 .text-type__cursor {
