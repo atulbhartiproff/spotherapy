@@ -10,22 +10,44 @@ interface Track {
 }
 
 export default function NowPlaying() {
-  const [track, setTrack] = useState<Track | null>(null); // Use the Track type
+  const [track, setTrack] = useState<Track | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchTrack = async () => {
+    try {
+      const res = await fetch("/api/spotify/currently-playing");
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      setTrack(data);
+    } catch (err) {
+      console.error("Error fetching track:", err);
+      setTrack(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    fetch("/api/spotify/currently-playing")
-      .then(res => res.json())
-      .then(data => setTrack(data));
+    fetchTrack(); // Initial fetch
+    const interval = setInterval(fetchTrack, 10000); // Refresh every 10s
+    return () => clearInterval(interval);
   }, []);
 
-  if (!track) return <p>Loading...</p>;
+  if (loading) return <p>Loading...</p>;
 
-  if (!track.isPlaying) return <p>Nothing is playing right now 🎧</p>;
+  if (!track || !track.isPlaying) {
+    return <p>Nothing is playing right now 🎧</p>;
+  }
 
   return (
     <div style={{ padding: 20 }}>
       <a href={track.trackUrl} target="_blank" rel="noreferrer">
-        <img src={track.albumImageUrl} alt={track.album} width={200} />
+        <img
+          src={track.albumImageUrl}
+          alt={track.album}
+          width={200}
+          style={{ borderRadius: 8 }}
+        />
         <h2>{track.title}</h2>
         <p>{track.artist}</p>
         <p><em>{track.album}</em></p>
