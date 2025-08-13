@@ -1,82 +1,69 @@
-import { NextApiRequest, NextApiResponse } from "next";
+import { getToken } from "next-auth/jwt";
+import type { NextApiRequest, NextApiResponse } from "next";
 
-async function refreshAccessToken(refreshToken: string) {
-  const url = "https://accounts.spotify.com/api/token";
+interface SpotifyImage {
+  url: string;
+  height: number;
+  width: number;
+}
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${Buffer.from(
-        `${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`
-      ).toString("base64")}`,
-    },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-    }),
-  });
+interface SpotifyArtist {
+  name: string;
+}
 
-  if (!response.ok) {
-    throw new Error("Failed to refresh access token");
-  }
+interface SpotifyAlbum {
+  name: string;
+  images: SpotifyImage[];
+}
 
-  return response.json();
+interface SpotifyTrack {
+  name: string;
+  artists: SpotifyArtist[];
+  album: SpotifyAlbum;
+  external_urls: { spotify: string };
+}
+
+interface SpotifyRecentlyPlayedItem {
+  played_at: string;
+  track: SpotifyTrack;
+}
+
+interface SpotifyRecentlyPlayedResponse {
+  items: SpotifyRecentlyPlayedItem[];
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" });
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+
+  if (!token || typeof token.accessToken !== "string") {
+    return res.status(401).json({ error: "Not authenticated" });
   }
 
   try {
-    let accessToken = req.headers.authorization?.split(" ")[1] || process.env.SPOTIFY_ACCESS_TOKEN;
-
-    if (!accessToken) {
-      return res.status(401).json({ error: "No access token found" });
-    }
-
-    // Make the API request
-    let response = await fetch(
-      "https://api.spotify.com/v1/me/player/recently-played?limit=20",
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
-
-    // If the token is expired, refresh it
-    if (response.status === 401) {
-      console.log("Access token expired. Attempting to refresh...");
-      const refreshToken = process.env.SPOTIFY_REFRESH_TOKEN; // Ensure this is set in your environment variables
-      if (!refreshToken) {
-        return res.status(401).json({ error: "No refresh token found" });
-      }
-
-      const refreshedTokens = await refreshAccessToken(refreshToken);
-      accessToken = refreshedTokens.access_token;
-
-      // Retry the API request with the new access token
-      response = await fetch(
-        "https://api.spotify.com/v1/me/player/recently-played?limit=20",
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      );
-    }
+    const response = await fetch("https://api.spotify.com/v1/me/player/recently-played?limit=20", {
+      headers: {
+        Authorization: `Bearer ${token.accessToken}`,
+      },
+    });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      return res.status(response.status).json(errorData);
+      return res.status(response.status).json({ error: "Failed to fetch recently played tracks" });
     }
 
-    const data = await response.json();
-    res.status(200).json(data);
-  } catch (err) {
-    console.error("Error fetching recently played:", err);
-    res.status(500).json({ error: "Internal server error" });
+    const data: SpotifyRecentlyPlayedResponse = await response.json();
+
+    const tracks = data.items.map((item) => ({
+      playedAt: item.played_at,
+      title: item.track.name,
+      artist: item.track.artists.map((a) => a.name).join(", "),
+      album: item.track.album.name,
+      albumImageUrl: item.track.album.images[0]?.url,
+      trackUrl: item.track.external_urls.spotify,
+    }));
+
+    return res.status(200).json(tracks);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch recently played tracks" });
   }
 }
